@@ -7,6 +7,7 @@ import type { AppConfig } from '../config';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { EtaService } from './eta';
 import { GeoIndex } from './geo-index';
+import { offerView } from './offer-view';
 import { Candidate, jobWindow, meetsSpec, rankCandidates } from './ranking';
 
 const ACTIVE: Job['status'][] = ['MATCHED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS'];
@@ -103,7 +104,7 @@ export class DispatchService implements OnApplicationBootstrap, OnModuleDestroy 
       expiresAt: new Date(now + this.cfg.offerTimeoutMs),
     }));
     await this.providers.increment({ id: best.providerId }, 'offersReceived', 1);
-    this.rt.toAccount(await this.accountOf(best.providerId), 'offer.created', this.offerView(offer, job));
+    this.rt.toAccount(await this.accountOf(best.providerId), 'offer.created', offerView(offer, job));
     this.schedule(jobId, this.cfg.offerTimeoutMs);
   }
 
@@ -232,15 +233,6 @@ export class DispatchService implements OnApplicationBootstrap, OnModuleDestroy 
       await this.offers.update({ id: o.id }, { status: 'CLOSED', respondedAt: new Date() });
       this.rt.toAccount(await this.accountOf(o.providerId), 'offer.closed', { offerId: o.id, reason: 'CLOSED' });
     }
-  }
-
-  offerView(offer: JobOffer, job: Job) {
-    return {
-      offerId: offer.id, jobId: job.id, expiresAt: offer.expiresAt, etaSec: offer.etaSec, distanceKm: offer.distanceKm,
-      typeCode: job.typeCode, options: job.options, requiredSpec: job.requiredSpec,
-      address: job.address, lat: job.lat, lng: job.lng, destAddress: job.destAddress,
-      scheduledAt: job.scheduledAt, estimate: { amount: job.estimate.amount, min: job.estimate.min, max: job.estimate.max }, memo: job.memo,
-    };
   }
 
   private async accountOf(providerId: string) {

@@ -1,8 +1,9 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { MoreThan, Repository } from 'typeorm';
+import { In, MoreThan, Repository } from 'typeorm';
 import { CatalogService } from '../catalog/catalog.service';
 import { GeoIndex } from '../dispatch/geo-index';
+import { offerView } from '../dispatch/offer-view';
 import { Job, JobOffer, Payment, Provider, ProviderEquipment } from '../entities';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 
@@ -106,7 +107,13 @@ export class ProvidersService {
 
   async pendingOffers(accountId: string) {
     const p = await this.byAccount(accountId);
-    return this.offers.find({ where: { providerId: p.id, status: 'PENDING', expiresAt: MoreThan(new Date()) }, order: { createdAt: 'DESC' } });
+    const offers = await this.offers.find({ where: { providerId: p.id, status: 'PENDING', expiresAt: MoreThan(new Date()) }, order: { createdAt: 'DESC' } });
+    if (!offers.length) return [];
+    const jobs = await this.jobs.findBy({ id: In(offers.map((o) => o.jobId)) });
+    return offers.flatMap((o) => {
+      const job = jobs.find((j) => j.id === o.jobId);
+      return job ? [offerView(o, job)] : [];
+    });
   }
 
   async jobsOf(accountId: string) {

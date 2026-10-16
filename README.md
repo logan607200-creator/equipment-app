@@ -13,7 +13,11 @@
 
 `server/` — NestJS + PostgreSQL + Redis 서버. 두 앱과 관리자 웹이 함께 쓰는 API와 실시간 채널입니다.
 
-`customer_app/` — 사용자 앱 (Flutter). 화면 캡처는 `screens/`에 있습니다.
+`customer_app/` — 사용자 앱 (Flutter)
+
+`provider_app/` — 이용자 앱 (Flutter)
+
+화면 캡처는 `screens/`에 있습니다.
 
 - 휴대폰 인증 로그인 (SMS 발송은 연동 전, 개발용 고정 코드 지원)
 - 장비 종류 표 (새 업종은 행 추가로 확장), 장비별 규격 (톤수, 작업 높이)
@@ -71,7 +75,8 @@ npm test                      # 단위 + 전체 흐름 테스트 (DB equipment_t
 
 ## 아직 안 된 것 (다음 단계)
 
-- 이용자 앱 (Flutter), 관리자 웹 화면
+- 관리자 웹 화면
+- 이용자 서류 사진 제출, 백그라운드 위치 전송
 - SMS 인증 발송, PG 자동결제, 푸시 알림(FCM), 안심번호, 채팅
 - 실제 경로 기반 ETA (T맵·카카오모빌리티), 지금은 직선 거리 어림
 - 작업 사진·서류 업로드 (S3)
