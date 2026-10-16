@@ -1,0 +1,1 @@
+{"root":["./src/App.tsx","./src/api.ts","./src/format.ts","./src/main.tsx","./src/components/JobDetail.tsx","./src/components/MapPanel.tsx","./src/pages/Alerts.tsx","./src/pages/Dashboard.tsx","./src/pages/Jobs.tsx","./src/pages/Providers.tsx","./src/pages/Rates.tsx"],"version":"5.6.3"}

@@ -1,12 +1,13 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Put, Query } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsBoolean, IsObject, IsUUID } from 'class-validator';
-import { In, Repository } from 'typeorm';
+import { IsBoolean, IsObject, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { Repository } from 'typeorm';
 import { CatalogService } from '../catalog/catalog.service';
 import { Roles } from '../common/roles';
 import { DispatchService } from '../dispatch/dispatch.service';
-import { Job, Provider } from '../entities';
+import { Provider } from '../entities';
 import { JobsService } from '../jobs/jobs.service';
+import { AdminService } from './admin.service';
 
 class VerifyDto {
   @IsBoolean() verified: boolean;
@@ -17,28 +18,34 @@ class AssignDto {
 class RatesDto {
   @IsObject() rates: Record<string, any>;
 }
+class CancelDto {
+  @IsOptional() @IsString() @MaxLength(200) reason?: string;
+}
 
 /** 운영자 웹 API */
 @Controller('admin')
 @Roles('ADMIN')
 export class AdminController {
   constructor(
-    @InjectRepository(Job) private readonly jobRepo: Repository<Job>,
     @InjectRepository(Provider) private readonly providerRepo: Repository<Provider>,
+    private readonly admin: AdminService,
     private readonly jobs: JobsService,
     private readonly dispatch: DispatchService,
     private readonly catalog: CatalogService,
   ) {}
 
-  /** 관제: 진행 중 호출 (alert=true 면 미배차 경보만) */
-  @Get('jobs') list(@Query('alert') alert?: string) {
-    return this.jobRepo.find({
-      where: alert === 'true'
-        ? { unassignedAlert: true, status: 'REQUESTED' }
-        : { status: In(['REQUESTED', 'MATCHED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS']) },
-      order: { createdAt: 'DESC' },
-      take: 200,
-    });
+  @Get('stats') stats() {
+    return this.admin.stats();
+  }
+
+  /** 관제: status=active(기본) | alert(미배차 경보) | all(최근 200건) */
+  @Get('jobs') list(@Query('status') status?: string, @Query('alert') alert?: string) {
+    const f = alert === 'true' ? 'alert' : status === 'alert' || status === 'all' ? status : 'active';
+    return this.admin.listJobs(f);
+  }
+
+  @Get('jobs/:id/candidates') candidates(@Param('id', ParseUUIDPipe) id: string) {
+    return this.admin.candidates(id);
   }
 
   @Post('jobs/:id/assign') assign(@Param('id', ParseUUIDPipe) id: string, @Body() dto: AssignDto) {
@@ -50,17 +57,17 @@ export class AdminController {
     return { ok: true };
   }
 
+  @Post('jobs/:id/cancel') cancel(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CancelDto) {
+    return this.admin.cancel(id, dto.reason);
+  }
+
   @Get('providers') providers(@Query('verified') verified?: string) {
-    return this.providerRepo.find({
-      where: verified === undefined ? {} : { verified: verified === 'true' },
-      order: { createdAt: 'DESC' },
-      take: 200,
-    });
+    return this.admin.listProviders(verified === undefined ? undefined : verified === 'true');
   }
 
   /** 서류 확인 후 승인 (서류 파일 업로드는 다음 단계) */
   @Post('providers/:id/verify') async verify(@Param('id', ParseUUIDPipe) id: string, @Body() dto: VerifyDto) {
-    await this.providerRepo.update({ id }, { verified: dto.verified });
+    await this.providerRepo.update({ id }, { verified: dto.verified, ...(dto.verified ? {} : { online: false }) });
     return this.providerRepo.findOneByOrFail({ id });
   }
 

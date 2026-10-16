@@ -17,6 +17,8 @@
 
 `provider_app/` — 이용자 앱 (Flutter)
 
+`admin_web/` — 관리자 웹 (React). 관제 지도, 미배차 수동 배정, 이용자 승인, 요금표, 호출 내역
+
 화면 캡처는 `screens/`에 있습니다.
 
 - 휴대폰 인증 로그인 (SMS 발송은 연동 전, 개발용 고정 코드 지원)
@@ -67,15 +69,18 @@ npm test                      # 단위 + 전체 흐름 테스트 (DB equipment_t
 | 이용자 | POST | `/provider/jobs/:id/adjustments` | 추가 요금 요청 |
 | 이용자 | POST | `/provider/jobs/:id/cancel` | 배정 취소 (자동 재배차) |
 | 이용자 | GET | `/provider/earnings` | 정산 요약 |
-| 운영자 | GET | `/admin/jobs?alert=true` | 관제, 미배차 경보 |
+| 운영자 | GET | `/admin/stats` | 오늘 현황 (호출, 배차율, 매출, 수수료) |
+| 운영자 | GET | `/admin/jobs?status=active\|alert\|all` | 관제, 미배차 경보, 호출 내역 |
+| 운영자 | GET | `/admin/jobs/:id/candidates` | 수동 배정 후보 (거리순) |
+| 운영자 | POST | `/admin/jobs/:id/cancel` | 운영자 취소 (수수료 없음) |
 | 운영자 | POST | `/admin/jobs/:id/assign` · `redispatch` | 수동 배차, 재배차 |
-| 운영자 | GET | `/admin/providers` | 이용자 목록 |
+| 운영자 | GET | `/admin/providers?verified=` | 이용자 목록 |
 | 운영자 | POST | `/admin/providers/:id/verify` | 서류 승인 |
 | 운영자 | PUT | `/admin/equipment-types/:code` | 요금표 수정 |
 
 ## 아직 안 된 것 (다음 단계)
 
-- 관리자 웹 화면
+- 관리자 웹: 운영자 계정 관리, 정산 지급, 고객 문의 처리
 - 이용자 서류 사진 제출, 백그라운드 위치 전송
 - SMS 인증 발송, PG 자동결제, 푸시 알림(FCM), 안심번호, 채팅
 - 실제 경로 기반 ETA (T맵·카카오모빌리티), 지금은 직선 거리 어림

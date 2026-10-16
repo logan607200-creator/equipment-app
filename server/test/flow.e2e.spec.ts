@@ -259,3 +259,30 @@ describe('취소', () => {
     await http().post('/provider/equipment').set(auth(token)).send({ typeCode: 'DUMP', spec: { heightM: 3 } }).expect(400);
   });
 });
+
+describe('운영자', () => {
+  it('오늘 현황, 이용자 목록, 배정 후보, 운영자 취소', async () => {
+    const stats = (await http().get('/admin/stats').set(auth(adminToken)).expect(200)).body;
+    expect(stats.requested).toBeGreaterThan(0);
+    expect(stats.gross).toBeGreaterThan(0);
+
+    const list = (await http().get('/admin/providers').set(auth(adminToken)).expect(200)).body;
+    expect(list[0].phone).toMatch(/^010/);
+    expect(Array.isArray(list[0].equipment)).toBe(true);
+
+    const sky = await provider('01077770001', { typeCode: 'SKY', spec: { heightM: 45 } }, near(0.01));
+    const customer = await login('01022220006', 'CUSTOMER');
+    const job = (await http().post('/jobs').set(auth(customer)).send({ typeCode: 'SKY', ...GANGNAM, requiredSpec: { heightM: 30 }, options: { durationUnit: 'HOUR', durationQty: 2 } }).expect(201)).body;
+    const cands = (await http().get(`/admin/jobs/${job.id}/candidates`).set(auth(adminToken)).expect(200)).body;
+    expect(cands[0].providerId).toBe(sky.id);
+    expect(cands[0].distanceKm).toBeGreaterThan(0);
+
+    const all = (await http().get('/admin/jobs?status=all').set(auth(adminToken)).expect(200)).body;
+    expect(all.find((j: any) => j.id === job.id).customerPhone).toBe('01022220006');
+
+    const c = (await http().post(`/admin/jobs/${job.id}/cancel`).set(auth(adminToken)).send({ reason: '고객 전화 요청' }).expect(201)).body;
+    expect(c.status).toBe('CANCELLED');
+    expect(c.cancelledBy).toBe('ADMIN');
+    expect((await http().get('/provider/offers').set(auth(sky.token))).body).toHaveLength(0);
+  });
+});

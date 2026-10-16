@@ -4,6 +4,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AdminController } from './admin/admin.controller';
+import { AdminService } from './admin/admin.service';
 import { AuthController, AuthService } from './auth/auth';
 import { CatalogController } from './catalog/catalog.controller';
 import { CatalogService } from './catalog/catalog.service';
@@ -46,7 +47,7 @@ import { RealtimeGateway } from './realtime/realtime.gateway';
   controllers: [HealthController, AuthController, CatalogController, JobsController, ProviderJobsController, ProvidersController, AdminController],
   providers: [
     { provide: APP_GUARD, useClass: AuthGuard },
-    RedisService, AuthService, CatalogService, GeoIndex, EtaService, DispatchService,
+    RedisService, AuthService, AdminService, CatalogService, GeoIndex, EtaService, DispatchService,
     ProvidersService, JobsService, PaymentsService, RealtimeGateway,
   ],
 })
