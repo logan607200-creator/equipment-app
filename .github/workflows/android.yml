@@ -1,0 +1,41 @@
+# 두 앱의 안드로이드 설치 파일(APK)을 만든다. 결과는 실행 화면의 Artifacts에서 받는다.
+# 앱이 붙을 서버 주소는 저장소 Settings → Secrets and variables → Actions → Variables 의 API_URL 로 정한다.
+name: Android APK
+
+on:
+  push:
+    paths: ['customer_app/**', 'provider_app/**', '.github/workflows/android.yml']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: [customer_app, provider_app]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - name: Build APK
+        working-directory: ${{ matrix.app }}
+        run: |
+          flutter pub get
+          flutter build apk --release \
+            --dart-define=API_URL=${{ vars.API_URL || 'http://10.0.2.2:3000' }} \
+            --dart-define=FIREBASE_API_KEY=${{ vars.FIREBASE_API_KEY }} \
+            --dart-define=FIREBASE_APP_ID=${{ matrix.app == 'customer_app' && vars.FIREBASE_CUSTOMER_APP_ID || vars.FIREBASE_PROVIDER_APP_ID }} \
+            --dart-define=FIREBASE_SENDER_ID=${{ vars.FIREBASE_SENDER_ID }} \
+            --dart-define=FIREBASE_PROJECT_ID=${{ vars.FIREBASE_PROJECT_ID }}
+          mv build/app/outputs/flutter-apk/app-release.apk build/${{ matrix.app }}.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.app }}
+          path: ${{ matrix.app }}/build/${{ matrix.app }}.apk
