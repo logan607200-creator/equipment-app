@@ -8,6 +8,7 @@ import '../theme.dart';
 import '../widgets/map_view.dart';
 import 'history.dart';
 import 'login.dart';
+import 'payment.dart';
 import 'request.dart';
 import 'tracking.dart';
 
@@ -66,8 +67,11 @@ class _HomeScreenState extends State<HomeScreen> {
         actions: [
           IconButton(tooltip: '이용 내역', icon: const Icon(Icons.receipt_long_outlined), onPressed: () => _open(const HistoryScreen())),
           PopupMenuButton<String>(
-            onSelected: (_) => _logout(),
-            itemBuilder: (_) => const [PopupMenuItem(value: 'logout', child: Text('로그아웃'))],
+            onSelected: (v) => v == 'cards' ? _open(const PaymentScreen()) : _logout(),
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'cards', child: Text('결제 카드')),
+              PopupMenuItem(value: 'logout', child: Text('로그아웃')),
+            ],
           ),
         ],
       ),

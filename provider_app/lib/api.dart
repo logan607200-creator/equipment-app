@@ -5,6 +5,8 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 
+import 'push.dart';
+
 /// 서버 주소. 빌드할 때 --dart-define=API_URL=https://api.example.com 으로 바꾼다.
 const apiUrl = String.fromEnvironment('API_URL', defaultValue: 'http://localhost:3000');
 
@@ -40,10 +42,21 @@ class Api {
   Future<void> restore() async {
     final prefs = await SharedPreferences.getInstance();
     _token = prefs.getString('token');
-    if (_token != null) _connectSocket();
+    if (_token != null) _afterLogin();
+  }
+
+  /// 앱이 꺼져 있거나 화면이 잠겨 있어도 호출 제안을 받도록 푸시를 켠다.
+  /// 알림을 눌러 앱을 열면 첫 화면이 대기 중인 제안을 바로 띄운다.
+  void _afterLogin() {
+    _connectSocket();
+    Push.start(register: (token, platform) => _send('POST', '/me/push-tokens', {'token': token, 'platform': platform}));
   }
 
   Future<void> logout() async {
+    if (Push.token != null) {
+      try { await _send('DELETE', '/me/push-tokens', {'token': Push.token, 'platform': pushPlatform}); } catch (_) {}
+    }
+    Push.stop();
     (await SharedPreferences.getInstance()).remove('token');
     _token = null;
     _socket?.dispose();
@@ -56,7 +69,7 @@ class Api {
     final res = await _send('POST', '/auth/otp/verify', {'phone': phone, 'code': code, 'role': 'PROVIDER'});
     _token = res['token'] as String;
     (await SharedPreferences.getInstance()).setString('token', _token!);
-    _connectSocket();
+    _afterLogin();
   }
 
   Future<List<Json>> equipmentTypes() async => _list(await _send('GET', '/equipment-types'));
@@ -97,6 +110,7 @@ class Api {
     final res = switch (method) {
       'GET' => await http.get(uri, headers: headers),
       'PUT' => await http.put(uri, headers: headers, body: jsonEncode(body ?? {})),
+      'DELETE' => await http.delete(uri, headers: headers, body: body == null ? null : jsonEncode(body)),
       _ => await http.post(uri, headers: headers, body: jsonEncode(body ?? {})),
     };
     final text = utf8.decode(res.bodyBytes);
