@@ -7,6 +7,7 @@ import { Roles } from '../common/roles';
 import { DispatchService } from '../dispatch/dispatch.service';
 import { Provider } from '../entities';
 import { JobsService } from '../jobs/jobs.service';
+import { PaymentsService } from '../payments/payments.service';
 import { AdminService } from './admin.service';
 
 class VerifyDto {
@@ -32,7 +33,13 @@ export class AdminController {
     private readonly jobs: JobsService,
     private readonly dispatch: DispatchService,
     private readonly catalog: CatalogService,
+    private readonly payments: PaymentsService,
   ) {}
+
+  /** 결제 전액 환불 (토스 결제면 결제사에도 취소 요청) */
+  @Post('jobs/:id/refund') refund(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CancelDto) {
+    return this.payments.refund(id, dto.reason?.trim() || '운영자 환불');
+  }
 
   @Get('stats') stats() {
     return this.admin.stats();

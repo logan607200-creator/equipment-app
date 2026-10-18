@@ -162,9 +162,41 @@ export class Payment {
   @Column({ type: 'int' }) amount: number;
   @Column({ type: 'int' }) commission: number;
   @Column({ type: 'int' }) providerPayout: number;
-  @Column({ type: 'varchar' }) status: 'CAPTURED' | 'FAILED';
+  @Column({ type: 'varchar' }) status: 'CAPTURED' | 'FAILED' | 'REFUNDED';
+  /** MOCK: PG 키가 없을 때 기록만 한 결제, TOSS: 토스페이먼츠 자동결제 */
+  @Column({ type: 'varchar', default: 'MOCK' }) method: 'MOCK' | 'TOSS';
+  /** 출동 후 취소 수수료인지 작업 요금인지 */
+  @Column({ type: 'varchar', default: 'FARE' }) kind: 'FARE' | 'CANCEL_FEE';
+  /** PG 거래 키 (토스 paymentKey) */
   @Column({ type: 'varchar', nullable: true }) pgTxId: string | null;
+  @Column({ type: 'varchar', nullable: true }) failReason: string | null;
+  @Column({ type: 'int', default: 0 }) attempts: number;
+  @CreateDateColumn({ type: 'timestamptz' }) createdAt: Date;
+  @UpdateDateColumn({ type: 'timestamptz' }) updatedAt: Date;
+}
+
+/** 사용자가 등록한 결제 카드. 카드번호는 PG가 보관하고 우리는 빌링키와 가린 번호만 둔다. */
+@Entity('payment_methods')
+export class PaymentMethod {
+  @PrimaryGeneratedColumn('uuid') id: string;
+  @Index() @Column() accountId: string;
+  /** 토스 customerKey (계정마다 하나) */
+  @Column() customerKey: string;
+  @Column() billingKey: string;
+  @Column({ type: 'varchar', nullable: true }) cardCompany: string | null;
+  @Column({ type: 'varchar', nullable: true }) cardNumber: string | null;
+  @Column({ default: true }) active: boolean;
   @CreateDateColumn({ type: 'timestamptz' }) createdAt: Date;
 }
 
-export const ENTITIES = [Account, EquipmentType, Provider, ProviderEquipment, Job, JobOffer, FareAdjustment, Rating, Payment];
+/** 푸시 알림을 받을 기기 */
+@Entity('device_tokens')
+export class DeviceToken {
+  @PrimaryGeneratedColumn('uuid') id: string;
+  @Index() @Column() accountId: string;
+  @Column({ unique: true }) token: string;
+  @Column({ type: 'varchar', default: 'unknown' }) platform: string;
+  @UpdateDateColumn({ type: 'timestamptz' }) updatedAt: Date;
+}
+
+export const ENTITIES = [Account, EquipmentType, Provider, ProviderEquipment, Job, JobOffer, FareAdjustment, Rating, Payment, PaymentMethod, DeviceToken];
