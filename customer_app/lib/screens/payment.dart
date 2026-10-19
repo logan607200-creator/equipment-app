@@ -61,6 +61,8 @@ class _PaymentScreenState extends State<PaymentScreen> with WidgetsBindingObserv
     setState(() => _opening = true);
     try {
       final url = await Api.instance.startCardRegistration();
+      // 체험판은 결제창 없이 바로 등록된다
+      if (url.isEmpty) return await _load();
       await launchUrl(Uri.parse(url), mode: LaunchMode.inAppBrowserView, webOnlyWindowName: '_blank');
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));

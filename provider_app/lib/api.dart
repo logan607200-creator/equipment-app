@@ -5,6 +5,8 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 
+import 'demo.dart';
+export 'demo.dart' show Json;
 import 'push.dart';
 
 /// 서버 주소. 빌드할 때 --dart-define=API_URL=https://api.example.com 으로 바꾼다.
@@ -24,7 +26,6 @@ class SocketEvent {
   final Map<String, dynamic> data;
 }
 
-typedef Json = Map<String, dynamic>;
 
 /// 이용자(공급자) 앱의 서버 API와 실시간 채널
 class Api {
@@ -37,9 +38,13 @@ class Api {
 
   /// offer.created, offer.closed, job.updated
   Stream<SocketEvent> get events => _events.stream;
-  bool get loggedIn => _token != null;
+  bool get loggedIn => demoMode || _token != null;
+
+  /// 체험판이면 서버 대신 앱 안의 가짜 서버가 응답한다
+  late final DemoBackend? _demo = demoMode ? DemoBackend((name, data) => _events.add(SocketEvent(name, Json.from(jsonDecode(jsonEncode(data)) as Map)))) : null;
 
   Future<void> restore() async {
+    if (demoMode) return;
     final prefs = await SharedPreferences.getInstance();
     _token = prefs.getString('token');
     if (_token != null) _afterLogin();
@@ -48,6 +53,7 @@ class Api {
   /// 앱이 꺼져 있거나 화면이 잠겨 있어도 호출 제안을 받도록 푸시를 켠다.
   /// 알림을 눌러 앱을 열면 첫 화면이 대기 중인 제안을 바로 띄운다.
   void _afterLogin() {
+    if (demoMode) return;
     _connectSocket();
     Push.start(register: (token, platform) => _send('POST', '/me/push-tokens', {'token': token, 'platform': platform}));
   }
@@ -105,6 +111,13 @@ class Api {
   List<Json> _list(dynamic v) => [for (final e in v as List) Json.from(e as Map)];
 
   Future<dynamic> _send(String method, String path, [Json? body]) async {
+    if (_demo != null) {
+      try {
+        return jsonDecode(jsonEncode(await _demo.handle(method, path, body)));
+      } on DemoError catch (e) {
+        throw ApiException(e.status, e.message);
+      }
+    }
     final uri = Uri.parse('$apiUrl$path');
     final headers = {'Content-Type': 'application/json', 'Authorization': ?(_token == null ? null : 'Bearer $_token')};
     final res = switch (method) {

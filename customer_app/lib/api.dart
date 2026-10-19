@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 
+import 'demo.dart';
 import 'models.dart';
 import 'push.dart';
 
@@ -31,15 +32,20 @@ class Api {
 
   /// job.updated, provider.location, adjustment.requested, payment.failed, payment.method.updated 이벤트
   Stream<SocketEvent> get events => _events.stream;
-  bool get loggedIn => _token != null;
+  bool get loggedIn => demoMode || _token != null;
+
+  /// 체험판이면 서버 대신 앱 안의 가짜 서버가 응답한다
+  late final DemoBackend? _demo = demoMode ? DemoBackend((name, data) => _events.add(SocketEvent(name, Map<String, dynamic>.from(jsonDecode(jsonEncode(data)) as Map)))) : null;
 
   Future<void> restore() async {
+    if (demoMode) return;
     final prefs = await SharedPreferences.getInstance();
     _token = prefs.getString('token');
     if (_token != null) _afterLogin();
   }
 
   void _afterLogin() {
+    if (demoMode) return;
     _connectSocket();
     Push.start(register: registerPushToken);
   }
@@ -122,6 +128,13 @@ class Api {
       _send('POST', '/me/push-tokens', {'token': token, 'platform': platform});
 
   Future<dynamic> _send(String method, String path, [Map<String, dynamic>? body]) async {
+    if (_demo != null) {
+      try {
+        return jsonDecode(jsonEncode(await _demo.handle(method, path, body)));
+      } on DemoError catch (e) {
+        throw ApiException(e.status, e.message);
+      }
+    }
     final uri = Uri.parse('$apiUrl$path');
     final headers = {
       'Content-Type': 'application/json',

@@ -29,7 +29,9 @@ jobs:
         working-directory: ${{ matrix.app }}
         run: |
           flutter pub get
+          # 서버 주소(API_URL)를 정하기 전에는 서버 없이 도는 체험판으로 만든다
           flutter build apk --release \
+            --dart-define=DEMO=${{ vars.API_URL == '' && 'true' || 'false' }} \
             --dart-define=API_URL=${{ vars.API_URL || 'http://10.0.2.2:3000' }} \
             --dart-define=FIREBASE_API_KEY=${{ vars.FIREBASE_API_KEY }} \
             --dart-define=FIREBASE_APP_ID=${{ matrix.app == 'customer_app' && vars.FIREBASE_CUSTOMER_APP_ID || vars.FIREBASE_PROVIDER_APP_ID }} \
@@ -60,4 +62,4 @@ jobs:
           gh release create apk-latest apk/customer_app.apk apk/provider_app.apk \
             --target ${{ github.sha }} --prerelease \
             --title "최신 설치 파일" \
-            --notes "customer_app.apk = 사용자(장비를 부르는 쪽) 앱, provider_app.apk = 이용자(기사·업체) 앱. 휴대폰에서 파일을 눌러 설치하고, '출처를 알 수 없는 앱' 설치를 허용하면 됩니다. (빌드: ${{ github.sha }})"
+            --notes "customer_app.apk = 사용자(장비를 부르는 쪽) 앱, provider_app.apk = 이용자(기사·업체) 앱. 서버 주소를 정하기 전에는 로그인 없이 도는 체험판이에요. 휴대폰에서 파일을 눌러 설치하고, '출처를 알 수 없는 앱' 설치를 허용하면 됩니다. (빌드: ${{ github.sha }})"
