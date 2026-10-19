@@ -9,7 +9,7 @@ const str = (key: string) => (process.env[key] ?? '').trim() || undefined;
 export const appConfig = () => ({
   port: num('PORT', 3000),
   /** 바깥에서 이 서버에 접속하는 주소. 카드 등록 페이지의 돌아올 주소에 쓴다. */
-  publicUrl: (str('PUBLIC_URL') ?? `http://localhost:${num('PORT', 3000)}`).replace(/\/$/, ''),
+  publicUrl: (str('PUBLIC_URL') ?? str('RENDER_EXTERNAL_URL') ?? `http://localhost:${num('PORT', 3000)}`).replace(/\/$/, ''),
   jwtSecret: process.env.JWT_SECRET ?? 'dev-only-secret-change-me',
   db: {
     url: process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/equipment',
@@ -18,8 +18,9 @@ export const appConfig = () => ({
   redisUrl: process.env.REDIS_URL ?? 'redis://localhost:6379',
   redisPrefix: process.env.REDIS_PREFIX ?? 'eq:',
   otp: {
-    // 개발 환경에서만 사용. 설정하면 SMS 대신 이 코드로 인증된다.
-    devCode: process.env.NODE_ENV === 'production' ? undefined : str('OTP_DEV_CODE'),
+    // 설정하면 SMS 대신 이 코드로 인증된다. 운영 환경에서는 문자 키가 없는 시험 기간에만 쓰이고,
+    // 솔라피 키를 넣는 순간 자동으로 꺼진다.
+    devCode: process.env.NODE_ENV === 'production' && str('SOLAPI_API_KEY') ? undefined : str('OTP_DEV_CODE'),
     ttlSec: num('OTP_TTL_SEC', 180),
     resendSec: num('OTP_RESEND_SEC', 30),
     maxPerHour: num('OTP_MAX_PER_HOUR', 5),
