@@ -11,6 +11,8 @@ export interface FareInput {
   destination?: LatLng | null;
   /** 작업 시작 시각 (예약이면 예약 시각) */
   at: Date;
+  /** 가장 가까운 이용자에서 현장까지 도로 거리(km). 모르면 출동비를 붙이지 않는다. */
+  dispatchKm?: number | null;
   options: {
     serviceKind?: TowServiceKind;
     vehicleClass?: VehicleClass;
@@ -32,6 +34,7 @@ export interface FareEstimate {
   max: number;
   lines: FareLine[];
   distanceKm?: number;
+  dispatchKm?: number;
 }
 
 const round100 = (n: number) => Math.round(n / 100) * 100;
@@ -80,6 +83,13 @@ export function estimateFare(type: EquipmentType, input: FareInput): FareEstimat
     }
   }
 
+  // 출동 거리 요금: 가까운 이용자가 무료 거리보다 멀리 있으면 넘는 만큼 km당 요금
+  const dispatchKm = input.dispatchKm != null ? Math.round(input.dispatchKm * 10) / 10 : undefined;
+  if (dispatchKm != null && r.dispatch) {
+    const extraKm = Math.max(0, dispatchKm - r.dispatch.freeKm);
+    if (extraKm > 0) lines.push({ label: `출동 거리 요금 ${extraKm.toFixed(1)}km (무료 ${r.dispatch.freeKm}km 초과)`, amount: round100(extraKm * r.dispatch.perKm) });
+  }
+
   const subtotal = lines.reduce((s, l) => s + l.amount, 0);
   const flags = kstFlags(input.at);
   const s = r.surcharge ?? {};
@@ -96,5 +106,6 @@ export function estimateFare(type: EquipmentType, input: FareInput): FareEstimat
     max: round100(amount * (1 + pct)),
     lines,
     distanceKm,
+    dispatchKm,
   };
 }

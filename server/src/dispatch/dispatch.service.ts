@@ -41,6 +41,11 @@ export class DispatchService implements OnApplicationBootstrap, OnModuleDestroy 
     this.cfg = config.get('dispatch')!;
   }
 
+  /** 배차가 찾는 가장 넓은 반경 */
+  get maxRadiusKm() {
+    return this.cfg.radiusStepsKm[this.cfg.radiusStepsKm.length - 1];
+  }
+
   async onApplicationBootstrap() {
     const open = await this.jobs.find({ where: { status: 'REQUESTED', unassignedAlert: false }, select: { id: true } });
     for (const j of open) this.schedule(j.id, 0);
@@ -129,17 +134,20 @@ export class DispatchService implements OnApplicationBootstrap, OnModuleDestroy 
       (job.typeCode !== 'TOW' || !e.towClasses.length || !job.options.vehicleClass || e.towClasses.includes(job.options.vehicleClass));
 
     const out: Candidate[] = [];
+    const origins = new Map<string, { lat: number; lng: number }>();
     for (const hit of hits) {
       const p = byId.get(hit.providerId);
       if (!p || excluded.has(p.id) || scheduledBusy.has(p.id)) continue;
       let eq: ProviderEquipment | undefined;
       if (scheduled) {
         eq = equipment.find((e) => e.providerId === p.id && fits(e));
+        if (p.baseLat != null && p.baseLng != null) origins.set(p.id, { lat: p.baseLat, lng: p.baseLng });
       } else {
         if (!p.online || p.currentJobId) continue;
         eq = equipment.find((e) => e.id === p.activeEquipmentId && fits(e));
         const loc = await this.geo.getLocation(p.id);
         if (!loc || Date.now() - loc.ts > this.cfg.locationStaleMs) continue;
+        origins.set(p.id, loc);
       }
       if (!eq) continue;
       out.push({
@@ -147,6 +155,14 @@ export class DispatchService implements OnApplicationBootstrap, OnModuleDestroy 
         etaSec: this.eta.estimateSec(hit.distanceKm), rating: p.rating, acceptanceRate: p.acceptanceRate,
       });
     }
+    // 가까운 몇 명은 실제 길찾기로 ETA를 바꾼다 (직선으로는 가까워도 강 건너, 반대 차로일 수 있다)
+    const near = [...out].sort((a, b) => a.distanceKm - b.distanceKm).slice(0, this.eta.routeCandidates);
+    await Promise.all(near.map(async (c) => {
+      const from = origins.get(c.providerId);
+      if (!from) return;
+      const sec = await this.eta.routeSec(`${job.id}:${c.providerId}`, from, { lat: job.lat, lng: job.lng });
+      if (sec != null) c.etaSec = sec;
+    }));
     return rankCandidates(out, this.cfg.etaTieSec);
   }
 

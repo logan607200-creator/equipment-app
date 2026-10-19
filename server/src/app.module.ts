@@ -18,6 +18,12 @@ import { ENTITIES } from './entities';
 import { HealthController } from './health';
 import { JobsController, ProviderJobsController } from './jobs/jobs.controller';
 import { JobsService } from './jobs/jobs.service';
+import { GeoController, PushTokenController } from './integrations/integrations.controller';
+import { PushService } from './integrations/fcm';
+import { KakaoService } from './integrations/kakao';
+import { SmsService } from './integrations/sms';
+import { TossClient } from './integrations/toss';
+import { PaymentsController } from './payments/payments.controller';
 import { PaymentsService } from './payments/payments.service';
 import { ProvidersController } from './providers/providers.controller';
 import { ProvidersService } from './providers/providers.service';
@@ -44,11 +50,13 @@ import { RealtimeGateway } from './realtime/realtime.gateway';
       useFactory: (c: ConfigService) => ({ secret: c.get('jwtSecret'), signOptions: { expiresIn: '30d' } }),
     }),
   ],
-  controllers: [HealthController, AuthController, CatalogController, JobsController, ProviderJobsController, ProvidersController, AdminController],
+  controllers: [HealthController, AuthController, CatalogController, JobsController, ProviderJobsController, ProvidersController, AdminController,
+    PaymentsController, PushTokenController, GeoController],
   providers: [
     { provide: APP_GUARD, useClass: AuthGuard },
     RedisService, AuthService, AdminService, CatalogService, GeoIndex, EtaService, DispatchService,
     ProvidersService, JobsService, PaymentsService, RealtimeGateway,
+    SmsService, TossClient, PushService, KakaoService,
   ],
 })
 export class AppModule {}

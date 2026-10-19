@@ -9,6 +9,8 @@ import '../format.dart';
 import '../models.dart';
 import '../theme.dart';
 import '../widgets/map_view.dart';
+import '../widgets/place_search.dart';
+import 'payment.dart';
 import 'tracking.dart';
 
 /// 호출 작성. 렉카는 상황·차종·목적지, 나머지 장비는 일정·대여 시간·규격을 받는다.
@@ -53,6 +55,28 @@ class _RequestScreenState extends State<RequestScreen> {
       _spec[k] = TextEditingController();
     }
     _refreshEstimate();
+    _fillAddress(_pickup, _address);
+  }
+
+  /// 좌표의 주소를 칸에 채운다 (비어 있을 때만). 카카오 키가 없으면 그대로 둔다.
+  Future<void> _fillAddress(LatLng p, TextEditingController c, {bool force = false}) async {
+    final a = await Api.instance.addressAt(p.latitude, p.longitude);
+    if (a != null && mounted && (force || c.text.trim().isEmpty)) setState(() => c.text = a);
+  }
+
+  Future<void> _search({required bool dest}) async {
+    final place = await searchPlace(context, title: dest ? '목적지 찾기' : '장비가 올 위치 찾기', near: _pickup);
+    if (place == null) return;
+    final at = LatLng(place.lat, place.lng);
+    _changed(() {
+      if (dest) {
+        _dest = at;
+        _destAddress.text = place.name == place.label ? place.label : '${place.name} (${place.label})';
+      } else {
+        _pickup = at;
+        _address.text = place.name == place.label ? place.label : '${place.label} ${place.name}';
+      }
+    });
   }
 
   @override
@@ -94,16 +118,20 @@ class _RequestScreenState extends State<RequestScreen> {
     _debounce = Timer(const Duration(milliseconds: 300), _refreshEstimate);
   }
 
+  // 늦게 온 예전 견적이 새 견적을 덮지 않도록 몇 번째 요청인지 센다
+  int _estimateSeq = 0;
+
   Future<void> _refreshEstimate() async {
+    final seq = ++_estimateSeq;
     if (_needsDest && _dest == null) {
       setState(() { _estimate = null; _estimateError = '목적지를 고르면 예상 요금이 나와요'; });
       return;
     }
     try {
       final e = await Api.instance.estimate(_body()..remove('injury'));
-      if (mounted) setState(() { _estimate = e; _estimateError = null; });
+      if (mounted && seq == _estimateSeq) setState(() { _estimate = e; _estimateError = null; });
     } on ApiException catch (e) {
-      if (mounted) setState(() { _estimate = null; _estimateError = e.message; });
+      if (mounted && seq == _estimateSeq) setState(() { _estimate = null; _estimateError = e.message; });
     }
   }
 
@@ -113,6 +141,7 @@ class _RequestScreenState extends State<RequestScreen> {
     ));
     if (picked == null) return;
     _changed(() => dest ? _dest = picked : _pickup = picked);
+    _fillAddress(picked, dest ? _destAddress : _address, force: true);
   }
 
   Future<void> _pickSchedule() async {
@@ -147,10 +176,35 @@ class _RequestScreenState extends State<RequestScreen> {
       Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => TrackingScreen(jobId: job.id)));
     } on ApiException catch (e) {
       if (!mounted) return;
+      if (e.code == 'CARD_REQUIRED') {
+        setState(() => _submitting = false);
+        return _askCard();
+      }
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  /// 카드가 없으면 등록 화면으로 보내고, 등록하고 돌아오면 바로 다시 호출한다.
+  Future<void> _askCard() async {
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        icon: const Icon(Icons.credit_card, size: 40),
+        title: const Text('결제 카드를 등록해 주세요'),
+        content: const Text('작업이 끝나면 등록한 카드로 자동 결제돼요. 한 번만 등록하면 돼요.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('나중에')),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('카드 등록')),
+        ],
+      ),
+    );
+    if (go != true || !mounted) return;
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PaymentScreen()));
+    if (!mounted) return;
+    final m = await Api.instance.paymentMethods();
+    if (m.cards.isNotEmpty && mounted) _submit();
   }
 
   @override
@@ -176,6 +230,12 @@ class _RequestScreenState extends State<RequestScreen> {
                   ),
                 ),
               ),
+              const SizedBox(height: 8),
+              Row(children: [
+                Expanded(child: OutlinedButton.icon(onPressed: () => _search(dest: false), icon: const Icon(Icons.search), label: const Text('주소로 찾기'))),
+                const SizedBox(width: 8),
+                Expanded(child: OutlinedButton.icon(onPressed: () => _pickOnMap(dest: false), icon: const Icon(Icons.map_outlined), label: const Text('지도에서 고르기'))),
+              ]),
               const SizedBox(height: 8),
               TextField(controller: _address, decoration: const InputDecoration(hintText: '자세한 위치 (예: 강남역 3번 출구 앞, 현장 정문)')),
             ]),
@@ -225,11 +285,17 @@ class _RequestScreenState extends State<RequestScreen> {
           _Section(
             title: '어디로 옮길까요?',
             child: Column(children: [
-              OutlinedButton.icon(
-                onPressed: () => _pickOnMap(dest: true),
-                icon: const Icon(Icons.flag_outlined),
-                label: Text(_dest == null ? '지도에서 목적지 고르기' : '목적지 다시 고르기'),
-              ),
+              Row(children: [
+                Expanded(child: OutlinedButton.icon(onPressed: () => _search(dest: true), icon: const Icon(Icons.search), label: const Text('주소로 찾기'))),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _pickOnMap(dest: true),
+                    icon: const Icon(Icons.flag_outlined),
+                    label: Text(_dest == null ? '지도에서 고르기' : '지도에서 다시'),
+                  ),
+                ),
+              ]),
               const SizedBox(height: 8),
               TextField(controller: _destAddress, decoration: const InputDecoration(hintText: '정비소·집·서비스센터 이름')),
             ]),
@@ -366,6 +432,14 @@ class _EstimateCard extends StatelessWidget {
                     child: Row(children: [Expanded(child: Text(l.label)), Text(won(l.amount))]),
                   ),
                 const SizedBox(height: 8),
+                if (e.distanceKm != null || e.dispatchKm != null)
+                  Text(
+                    [
+                      if (e.distanceKm != null) '견인 거리 ${e.distanceKm!.toStringAsFixed(1)}km',
+                      if (e.dispatchKm != null) '가장 가까운 기사까지 ${e.dispatchKm!.toStringAsFixed(1)}km',
+                    ].join(' · '),
+                    style: const TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
                 const Text('현장에서 요금이 바뀌면 앱에서 승인하셔야만 청구돼요.', style: TextStyle(fontSize: 12, color: Colors.black54)),
               ]),
       ),

@@ -4,6 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { CatalogService } from '../catalog/catalog.service';
 import { estimateFare, FareInput } from '../catalog/fare';
+import { ROAD_FACTOR } from '../common/geo';
 import type { AuthUser } from '../common/roles';
 import { DispatchService } from '../dispatch/dispatch.service';
 import { GeoIndex } from '../dispatch/geo-index';
@@ -62,7 +63,15 @@ export class JobsService {
     const type = await this.catalog.get(input.typeCode);
     const at = input.scheduledAt ? new Date(input.scheduledAt) : new Date();
     const destination = input.destLat != null && input.destLng != null ? { lat: input.destLat, lng: input.destLng } : null;
-    return estimateFare(type, { pickup: { lat: input.lat, lng: input.lng }, destination, at, options: input.options ?? {} });
+    const dispatchKm = type.rates.dispatch ? await this.nearestProviderKm(input) : null;
+    return estimateFare(type, { pickup: { lat: input.lat, lng: input.lng }, destination, at, dispatchKm, options: input.options ?? {} });
+  }
+
+  /** 출동 거리 요금 기준: 즉시 호출은 지금 출근해 있는 이용자, 예약은 차고지 중 가장 가까운 곳까지의 도로 거리 어림값 */
+  private async nearestProviderKm(input: CreateJobInput) {
+    const radiusKm = this.dispatch.maxRadiusKm;
+    const [hit] = await this.geo.search(input.scheduledAt ? 'base' : 'live', input.typeCode, input.lat, input.lng, radiusKm, 1);
+    return hit ? hit.distanceKm * ROAD_FACTOR : null;
   }
 
   async create(customerId: string, input: CreateJobInput) {
@@ -71,6 +80,9 @@ export class JobsService {
     }
     if (input.scheduledAt && new Date(input.scheduledAt).getTime() < Date.now()) {
       throw new BadRequestException('예약 시각이 지났습니다');
+    }
+    if (this.payments.cardRequired && !(await this.payments.activeMethod(customerId))) {
+      throw new BadRequestException({ code: 'CARD_REQUIRED', message: '결제 카드를 먼저 등록해 주세요' });
     }
     const open = await this.jobs.countBy({ customerId, status: 'REQUESTED' });
     if (open >= 3) throw new ConflictException('대기 중인 호출이 너무 많습니다');
@@ -97,10 +109,11 @@ export class JobsService {
     const job = await this.jobs.findOneBy({ id });
     if (!job) throw new NotFoundException('없는 호출입니다');
     await this.assertCanView(user, job);
-    const [adjustments, provider, equipment] = await Promise.all([
+    const [adjustments, provider, equipment, payment] = await Promise.all([
       this.adjustments.find({ where: { jobId: id }, order: { createdAt: 'ASC' } }),
       job.providerId ? this.providerRepo.findOneBy({ id: job.providerId }) : null,
       job.equipmentId ? this.equipmentRepo.findOneBy({ id: job.equipmentId }) : null,
+      this.payments.forJob(job.id),
     ]);
     const location = job.providerId && ['MATCHED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS'].includes(job.status)
       ? await this.geo.getLocation(job.providerId) : null;
@@ -110,6 +123,7 @@ export class JobsService {
       provider: provider && { id: provider.id, companyName: provider.companyName, rating: provider.rating },
       equipment: equipment && { typeCode: equipment.typeCode, plateNo: equipment.plateNo, spec: equipment.spec },
       providerLocation: location,
+      payment: payment && { status: payment.status, amount: payment.amount, kind: payment.kind, method: payment.method, failReason: payment.failReason },
     };
   }
 
@@ -131,7 +145,7 @@ export class JobsService {
     const fresh = await this.jobs.findOneByOrFail({ id });
     if (job.providerId) {
       await this.providers.releaseFromJob(job.providerId, id);
-      if (fee > 0) await this.payments.capture(fresh, fee);
+      if (fee > 0) await this.payments.capture(fresh, fee, 'CANCEL_FEE');
       await this.notifyProvider(job.providerId, fresh);
     }
     return fresh;

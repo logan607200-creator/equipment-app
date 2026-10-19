@@ -3,3 +3,4 @@ dist/
 .env
 .dart_tool/
 build/
+dump.rdb

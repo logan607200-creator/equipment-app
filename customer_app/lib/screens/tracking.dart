@@ -8,6 +8,7 @@ import '../format.dart';
 import '../models.dart';
 import '../theme.dart';
 import '../widgets/map_view.dart';
+import 'payment.dart';
 
 /// 호출 이후 화면: 찾는 중 → 배정·이동 → 작업 → 완료(영수증·평가)
 class TrackingScreen extends StatefulWidget {
@@ -60,6 +61,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
         setState(() => _providerAt = LatLng((e.data['lat'] as num).toDouble(), (e.data['lng'] as num).toDouble()));
       case 'job.updated':
       case 'adjustment.requested':
+      case 'payment.failed':
         _load();
     }
   }
@@ -358,10 +360,20 @@ class _ReceiptState extends State<_Receipt> {
             const Divider(height: 24),
             _row('결제 금액', won(j.finalFare ?? j.estimate.amount), bold: true),
             const SizedBox(height: 4),
-            const Align(alignment: Alignment.centerLeft, child: Text('등록한 카드로 결제됐어요.', style: TextStyle(fontSize: 12, color: Colors.black54))),
+            Align(alignment: Alignment.centerLeft, child: Text(_paymentNote(j), style: const TextStyle(fontSize: 12, color: Colors.black54))),
+            if (j.payment?['approvalNo'] != null) ...[
+              const Divider(height: 24),
+              _row('결제 카드', '${j.payment!['card']}'),
+              _row('승인번호', '${j.payment!['approvalNo']}'),
+              _row('결제 시각', _time(j.payment!['paidAt'] as String)),
+            ],
           ]),
         ),
       ),
+      if (j.paymentFailed) ...[
+        const SizedBox(height: 12),
+        _PaymentFailed(job: j, onDone: widget.onRated),
+      ],
       const SizedBox(height: 24),
       if (_rated)
         const Text('평가해 주셔서 고마워요.', textAlign: TextAlign.center, style: TextStyle(fontSize: 16))
@@ -381,6 +393,20 @@ class _ReceiptState extends State<_Receipt> {
         FilledButton(onPressed: _submit, child: const Text('평가 보내기')),
       ],
     ]);
+  }
+
+  String _paymentNote(Job j) => switch (j.payment?['status']) {
+        'PENDING' => '카드 결제를 진행하고 있어요…',
+        'CAPTURED' => '등록한 카드로 결제됐어요.',
+        'FAILED' => '결제가 안 됐어요. 아래에서 다시 결제해 주세요.',
+        'REFUNDED' => '환불됐어요.',
+        _ => '등록한 카드로 결제돼요.',
+      };
+
+  String _time(String iso) {
+    final t = DateTime.parse(iso).toLocal();
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${t.year}.${two(t.month)}.${two(t.day)} ${two(t.hour)}:${two(t.minute)}';
   }
 
   Widget _row(String a, String b, {bool bold = false}) => Padding(
@@ -409,6 +435,60 @@ class _Cancelled extends StatelessWidget {
           Text(job.cancelFee > 0 ? '출동비 ${won(job.cancelFee)}이 결제됐어요.' : '요금은 나오지 않았어요.', style: const TextStyle(color: Colors.black54)),
           const SizedBox(height: 24),
           FilledButton(onPressed: () => Navigator.pop(context), child: const Text('처음으로')),
+        ]),
+      ),
+    );
+  }
+}
+
+/// 자동결제가 거절됐을 때: 카드를 바꾸거나 다시 결제한다
+class _PaymentFailed extends StatefulWidget {
+  const _PaymentFailed({required this.job, required this.onDone});
+  final Job job;
+  final VoidCallback onDone;
+  @override
+  State<_PaymentFailed> createState() => _PaymentFailedState();
+}
+
+class _PaymentFailedState extends State<_PaymentFailed> {
+  bool _busy = false;
+
+  Future<void> _retry() async {
+    setState(() => _busy = true);
+    try {
+      await Api.instance.retryPayment(widget.job.id);
+      widget.onDone();
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reason = widget.job.payment?['failReason'] as String?;
+    return Card(
+      color: const Color(0xFFFDECEC),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          const Text('결제가 안 됐어요', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Color(0xFFB42318))),
+          if (reason != null) Padding(padding: const EdgeInsets.only(top: 4), child: Text(reason)),
+          const SizedBox(height: 12),
+          Row(children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () async {
+                  await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PaymentScreen()));
+                  widget.onDone();
+                },
+                child: const Text('카드 바꾸기'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(child: FilledButton(onPressed: _busy ? null : _retry, child: const Text('다시 결제'))),
+          ]),
         ]),
       ),
     );

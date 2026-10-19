@@ -1,0 +1,65 @@
+# 두 앱의 안드로이드 설치 파일(APK)을 만든다. 결과는 저장소 Releases 의 '최신 설치 파일'(apk-latest)에 올라가
+# 휴대폰에서 바로 받을 수 있다. 실행 화면의 Artifacts 에도 남는다.
+# 앱이 붙을 서버 주소는 저장소 Settings → Secrets and variables → Actions → Variables 의 API_URL 로 정한다.
+name: Android APK
+
+on:
+  push:
+    paths: ['customer_app/**', 'provider_app/**', '.github/workflows/android.yml']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: [customer_app, provider_app]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - name: Build APK
+        working-directory: ${{ matrix.app }}
+        run: |
+          flutter pub get
+          # 서버 주소(API_URL)를 정하기 전에는 서버 없이 도는 체험판으로 만든다
+          flutter build apk --release \
+            --dart-define=DEMO=${{ vars.API_URL == '' && 'true' || 'false' }} \
+            --dart-define=API_URL=${{ vars.API_URL || 'http://10.0.2.2:3000' }} \
+            --dart-define=FIREBASE_API_KEY=${{ vars.FIREBASE_API_KEY }} \
+            --dart-define=FIREBASE_APP_ID=${{ matrix.app == 'customer_app' && vars.FIREBASE_CUSTOMER_APP_ID || vars.FIREBASE_PROVIDER_APP_ID }} \
+            --dart-define=FIREBASE_SENDER_ID=${{ vars.FIREBASE_SENDER_ID }} \
+            --dart-define=FIREBASE_PROJECT_ID=${{ vars.FIREBASE_PROJECT_ID }}
+          mv build/app/outputs/flutter-apk/app-release.apk build/${{ matrix.app }}.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.app }}
+          path: ${{ matrix.app }}/build/${{ matrix.app }}.apk
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: apk
+          merge-multiple: true
+      - name: Publish to Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release delete apk-latest --yes --cleanup-tag || true
+          gh release create apk-latest apk/customer_app.apk apk/provider_app.apk \
+            --target ${{ github.sha }} --prerelease \
+            --title "최신 설치 파일" \
+            --notes "customer_app.apk = 사용자(장비를 부르는 쪽) 앱, provider_app.apk = 이용자(기사·업체) 앱. 서버 주소를 정하기 전에는 로그인 없이 도는 체험판이에요. 휴대폰에서 파일을 눌러 설치하고, '출처를 알 수 없는 앱' 설치를 허용하면 됩니다. (빌드: ${{ github.sha }})"

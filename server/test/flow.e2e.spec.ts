@@ -177,6 +177,9 @@ describe('크레인: 규격 조건, 무응답, 미배차 경보, 수동 배차',
     const job = (await http().post('/jobs').set(auth(customer)).send({
       typeCode: 'CRANE', ...GANGNAM, requiredSpec: { tonnage: 25 }, options: { durationUnit: 'HALF_DAY' },
     }).expect(201)).body;
+    // 출동 거리 요금은 가장 가까운 출근 이용자 기준이고, 무료 거리 안이라 붙지 않는다
+    expect(job.estimate.dispatchKm).toBeLessThan(1);
+    expect(job.estimate.lines.some((l: { label: string }) => l.label.startsWith('출동 거리'))).toBe(false);
 
     const offer = await offerFor(big.token, job.id);
     expect((await http().get('/provider/offers').set(auth(small.token))).body).toHaveLength(0);
