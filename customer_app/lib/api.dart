@@ -103,6 +103,9 @@ class Api {
   /// 카드 등록 페이지 주소 (앱 안 브라우저로 연다)
   Future<String> startCardRegistration() async => (await _send('POST', '/payments/billing/session'))['url'] as String;
 
+  /// 체험판 전용: 앱 안의 카드 입력 화면에서 넣은 카드를 등록한다
+  Future<void> registerDemoCard(Map<String, String> card) => _send('POST', '/payments/billing/demo-card', card);
+
   Future<void> removeCard(String id) => _send('DELETE', '/payments/methods/$id');
 
   Future<void> retryPayment(String jobId) => _send('POST', '/payments/jobs/$jobId/retry');
@@ -132,7 +135,7 @@ class Api {
       try {
         return jsonDecode(jsonEncode(await _demo.handle(method, path, body)));
       } on DemoError catch (e) {
-        throw ApiException(e.status, e.message);
+        throw ApiException(e.status, e.message, e.code);
       }
     }
     final uri = Uri.parse('$apiUrl$path');

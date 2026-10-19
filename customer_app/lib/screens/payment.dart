@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../api.dart';
+import '../demo.dart' show demoCardUrl;
 import '../models.dart';
 import '../theme.dart';
+import 'demo_card.dart';
 
 /// 결제 카드 등록·확인. 카드 정보는 토스페이먼츠 결제창에서 넣고 앱에는 가린 번호만 보인다.
 class PaymentScreen extends StatefulWidget {
@@ -61,8 +63,12 @@ class _PaymentScreenState extends State<PaymentScreen> with WidgetsBindingObserv
     setState(() => _opening = true);
     try {
       final url = await Api.instance.startCardRegistration();
-      // 체험판은 결제창 없이 바로 등록된다
-      if (url.isEmpty) return await _load();
+      // 체험판은 결제사 창 대신 앱 안의 카드 입력 화면을 연다
+      if (url == demoCardUrl) {
+        if (!mounted) return;
+        await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const DemoCardScreen()));
+        return await _load();
+      }
       await launchUrl(Uri.parse(url), mode: LaunchMode.inAppBrowserView, webOnlyWindowName: '_blank');
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
@@ -130,7 +136,7 @@ class _PaymentScreenState extends State<PaymentScreen> with WidgetsBindingObserv
                 Text(
                   d.pgEnabled
                       ? '카드 번호는 토스페이먼츠가 보관하고, 이 앱과 서버에는 저장되지 않아요.'
-                      : '지금은 결제사 연동 전이라 시연용 카드로 등록돼요. 돈은 나가지 않아요.',
+                      : '지금은 결제사 연동 전이라 체험용으로 등록돼요. 돈은 나가지 않아요.',
                   textAlign: TextAlign.center,
                   style: const TextStyle(fontSize: 12, color: Colors.black54),
                 ),

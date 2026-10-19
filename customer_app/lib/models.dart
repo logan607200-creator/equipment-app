@@ -39,18 +39,21 @@ class FareLine {
 }
 
 class Estimate {
-  Estimate({required this.amount, required this.min, required this.max, required this.lines, this.distanceKm});
+  Estimate({required this.amount, required this.min, required this.max, required this.lines, this.distanceKm, this.dispatchKm});
   final int amount;
   final int min;
   final int max;
   final List<FareLine> lines;
   final double? distanceKm;
+  /// 가장 가까운 이용자에서 현장까지 거리
+  final double? dispatchKm;
 
   factory Estimate.fromJson(Map<String, dynamic> j) => Estimate(
         amount: j['amount'],
         min: j['min'],
         max: j['max'],
         distanceKm: (j['distanceKm'] as num?)?.toDouble(),
+        dispatchKm: (j['dispatchKm'] as num?)?.toDouble(),
         lines: [for (final l in (j['lines'] as List)) FareLine(l['label'], l['amount'])],
       );
 }

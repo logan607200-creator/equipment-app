@@ -41,6 +41,11 @@ export class DispatchService implements OnApplicationBootstrap, OnModuleDestroy 
     this.cfg = config.get('dispatch')!;
   }
 
+  /** 배차가 찾는 가장 넓은 반경 */
+  get maxRadiusKm() {
+    return this.cfg.radiusStepsKm[this.cfg.radiusStepsKm.length - 1];
+  }
+
   async onApplicationBootstrap() {
     const open = await this.jobs.find({ where: { status: 'REQUESTED', unassignedAlert: false }, select: { id: true } });
     for (const j of open) this.schedule(j.id, 0);

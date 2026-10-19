@@ -4,6 +4,7 @@ import type { EquipmentType } from '../entities';
 // 운영 전에 관리자 API(PUT /admin/equipment-types/:code)로 실제 요금표를 넣어야 한다.
 const time = (hourly: number, halfDay: number, day: number) => ({
   hourly, minHours: 2, halfDay, day,
+  dispatch: { freeKm: 5, perKm: 2000 },
   surcharge: { night: 0.2, holiday: 0.1 },
   cancelFee: Math.round(hourly / 2),
 });

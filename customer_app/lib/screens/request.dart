@@ -118,16 +118,20 @@ class _RequestScreenState extends State<RequestScreen> {
     _debounce = Timer(const Duration(milliseconds: 300), _refreshEstimate);
   }
 
+  // 늦게 온 예전 견적이 새 견적을 덮지 않도록 몇 번째 요청인지 센다
+  int _estimateSeq = 0;
+
   Future<void> _refreshEstimate() async {
+    final seq = ++_estimateSeq;
     if (_needsDest && _dest == null) {
       setState(() { _estimate = null; _estimateError = '목적지를 고르면 예상 요금이 나와요'; });
       return;
     }
     try {
       final e = await Api.instance.estimate(_body()..remove('injury'));
-      if (mounted) setState(() { _estimate = e; _estimateError = null; });
+      if (mounted && seq == _estimateSeq) setState(() { _estimate = e; _estimateError = null; });
     } on ApiException catch (e) {
-      if (mounted) setState(() { _estimate = null; _estimateError = e.message; });
+      if (mounted && seq == _estimateSeq) setState(() { _estimate = null; _estimateError = e.message; });
     }
   }
 
@@ -428,6 +432,14 @@ class _EstimateCard extends StatelessWidget {
                     child: Row(children: [Expanded(child: Text(l.label)), Text(won(l.amount))]),
                   ),
                 const SizedBox(height: 8),
+                if (e.distanceKm != null || e.dispatchKm != null)
+                  Text(
+                    [
+                      if (e.distanceKm != null) '견인 거리 ${e.distanceKm!.toStringAsFixed(1)}km',
+                      if (e.dispatchKm != null) '가장 가까운 기사까지 ${e.dispatchKm!.toStringAsFixed(1)}km',
+                    ].join(' · '),
+                    style: const TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
                 const Text('현장에서 요금이 바뀌면 앱에서 승인하셔야만 청구돼요.', style: TextStyle(fontSize: 12, color: Colors.black54)),
               ]),
       ),

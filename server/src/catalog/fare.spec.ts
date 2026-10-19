@@ -37,6 +37,15 @@ describe('estimateFare', () => {
     expect(e.amount).toBe(1_200_000);
   });
 
+  it('출동 거리 요금: 가까운 이용자가 무료 거리보다 멀면 넘는 km만큼', () => {
+    const near = estimateFare(type('CRANE'), { pickup: seoul, at: weekdayNoon, dispatchKm: 4, options: { durationUnit: 'HALF_DAY' } });
+    expect(near.amount).toBe(500000);
+    const far = estimateFare(type('CRANE'), { pickup: seoul, at: weekdayNoon, dispatchKm: 12.34, options: { durationUnit: 'HALF_DAY' } });
+    expect(far.lines[1]).toEqual({ label: '출동 거리 요금 7.3km (무료 5km 초과)', amount: 14600 });
+    expect(far.dispatchKm).toBe(12.3);
+    expect(far.amount).toBe(514600);
+  });
+
   it('야간·주말 할증', () => {
     // 2026-10-17(토) 23:00 KST
     const satNight = new Date('2026-10-17T14:00:00Z');

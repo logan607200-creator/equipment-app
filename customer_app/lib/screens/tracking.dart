@@ -361,6 +361,12 @@ class _ReceiptState extends State<_Receipt> {
             _row('결제 금액', won(j.finalFare ?? j.estimate.amount), bold: true),
             const SizedBox(height: 4),
             Align(alignment: Alignment.centerLeft, child: Text(_paymentNote(j), style: const TextStyle(fontSize: 12, color: Colors.black54))),
+            if (j.payment?['approvalNo'] != null) ...[
+              const Divider(height: 24),
+              _row('결제 카드', '${j.payment!['card']}'),
+              _row('승인번호', '${j.payment!['approvalNo']}'),
+              _row('결제 시각', _time(j.payment!['paidAt'] as String)),
+            ],
           ]),
         ),
       ),
@@ -390,11 +396,18 @@ class _ReceiptState extends State<_Receipt> {
   }
 
   String _paymentNote(Job j) => switch (j.payment?['status']) {
+        'PENDING' => '카드 결제를 진행하고 있어요…',
         'CAPTURED' => '등록한 카드로 결제됐어요.',
         'FAILED' => '결제가 안 됐어요. 아래에서 다시 결제해 주세요.',
         'REFUNDED' => '환불됐어요.',
         _ => '등록한 카드로 결제돼요.',
       };
+
+  String _time(String iso) {
+    final t = DateTime.parse(iso).toLocal();
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${t.year}.${two(t.month)}.${two(t.day)} ${two(t.hour)}:${two(t.minute)}';
+  }
 
   Widget _row(String a, String b, {bool bold = false}) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 3),
